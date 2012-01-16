@@ -1,0 +1,41 @@
+#!/usr/bin/env ruby
+#
+#  Created by Robert Lihm on 2007-06-06.
+#  Copyright (c) 2007. All rights reserved.
+#
+#  rlihm@lihmedia.com
+
+require 'find'
+module Find
+  def match(*paths)
+    matched = []
+    find(*paths) { |path| matched << path if yield path }
+    return matched
+  end
+  module_function :match
+end
+
+dir = *ARGV # Argument I/O
+counter = 0
+needle  = '.DS_Store'
+
+must_start_with = "This Ruby program"
+Find.match(dir) do |p|
+  file = File.basename(p)
+  #if File.basename(p) == needle
+#  puts file.slice(0,2)
+  if file == needle || file.slice(0,2) == '._' # try to get hidden textmate files => || file.slice(0,1) == '._'
+    File.delete(p)
+    puts '--> ' + file + ' removed'
+    counter += 1
+  end
+
+end
+
+# give final feedback
+if counter > 0
+  puts '==> ' + counter.to_s + ' files successfully removed'
+#  puts '==> ' + counter.to_s + ' ' + needle + ' files successfully removed'
+else
+  puts '==> No matching files found.'
+end
