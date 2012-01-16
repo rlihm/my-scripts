@@ -1,0 +1,146 @@
+#!/usr/bin/env ruby
+#
+#  find_duplicates2.rb
+#
+#  Modified by Robert Lihm on 2007-03-05.
+#  Copyright (c) 2007. All rights reserved.
+#  The "duplicate seache engine" comes from:
+#  Ruby CookBook, by Lucas Carlson and Leonard Richardson, Copyright (c) 2006 O'Reilly Media, Inc., ISBN 0-596-52369-6.
+#  
+#  The delead, replaice, make (soft)link funktions are written by Robert Lihm
+#  And stand under the tearms oft the GPL -> http://www.fsf.org/licensing/licenses/gpl.html
+
+
+# http://www.fsf.org/licensing/licenses/gpl.html
+
+#TODO Evtl. gibt es Sinn, softlinks nicht zu verfolgen
+
+require 'find'
+#require 'mklog.rb'
+
+BLOCK_SIZE = 1024*8
+del_counter = 0
+num_counter = 0
+#flag_1 = true
+arr_log = []
+
+puts "==> start cleaning"
+
+def each_set_of_duplicates(*paths, &block)
+  sizes = Hash.new {|h, k| h[k] = [] }
+  # walk through subdirectories
+  Find.find(*paths) { |f| sizes[File.size(f)] << f if File.file? f }
+
+  sizes.each_pair do |size, files|
+    next unless files.size > 1
+    offset = 0
+    files = [files]
+    while !files.empty? && offset <= size
+      files = eliminate_non_duplicates(files, size, offset, &block)
+      offset += BLOCK_SIZE
+    end
+  end
+end
+#---
+def eliminate_non_duplicates(partition, size, offset)
+  possible_duplicates = []
+  partition.each do |possible_duplicate_set|
+    blocks = Hash.new {|h, k| h[k] = [] }
+    possible_duplicate_set.each do |f|
+      block = open(f, 'rb') do |file|
+        file.seek(offset)
+        file.read(BLOCK_SIZE)
+      end
+      blocks[block || ''] << f
+    end
+    blocks.each_value do |files|      
+      if files.size > 1
+        if offset+BLOCK_SIZE >= size
+          # We know these are duplicates.
+          yield files
+        else
+          # We suspect these are duplicates, but we need to compare 
+          # more blocks of data.
+          possible_duplicates << files
+        end
+      end
+    end
+  end
+ return possible_duplicates
+end
+
+each_set_of_duplicates(*ARGV) do |f|
+  
+  str_prefix = "Alias"
+  
+  num_arr = f.length - 1
+  num_del_files = 0
+  f = f.reverse
+  
+  arr_linked_files = []
+  arr_all_linked_files = []
+  
+  arr_log << ARGV
+  
+  while num_arr > 0
+    filename = File.basename(f[num_arr]) # get filname
+    #str_new_path = f[num_arr].chomp(filename) # get path
+    
+    file = f[num_arr]
+    
+    #puts "str_new_path #{str_new_path}"
+    
+    num_del_files += File.delete(f[num_arr])
+    arr_linked_files << f[num_arr]
+    
+    # TODO entscheiden, ob hard- oder softlinks verwaendet werden.
+    
+# Make Symlink
+    #arr_link = File.symlink("#{Dir.pwd}/#{f[0]}", "#{Dir.pwd}/#{str_new_path}#{str_prefix}#{filename}")
+    #arr_link = File.symlink("#{f[0]}", "#{str_new_path}#{filename} #{str_prefix}")
+    #arr_link = File.symlink("#{f[0]}", "#{file} #{str_prefix}")
+    
+# Make Hardlink
+    #arr_link = File.link("#{Dir.pwd}/#{f[0]}", "#{Dir.pwd}/#{str_new_path}#{str_prefix}#{filename}")
+    #arr_link = File.link("#{f[0]}", "#{str_new_path}#{str_prefix}#{filename}")
+    
+    
+    if num_arr == 1 #last loop
+      num_counter += 1
+      spacer_1 =  "===========================================================================\n##{ num_counter}"
+      #spacer_2 = "___________________________________________________________________________"
+      
+      puts "==> Detected duplicates: #{num_del_files} || orig. File: #{File.basename(f[0])}"
+      
+      basename_2 = File.basename(f[0])
+      path_2 = f[0].chomp(basename_2)
+      arr_log << "\n#{spacer_1}\nOriginal File: #{basename_2}\nOriginal File location: #{path_2}\n\rReplaced Files: #{num_del_files}\n"+ arr_linked_files.join("\n") 
+      del_counter += num_del_files
+    end    
+    num_arr -= 1
+  end
+  
+end
+
+def mklog (log)
+  
+  log_name = "rmdup_#{Time.now.usec}.log"
+  
+  str_log_header = "DupMate - Logfile\n#{Time.new}\nTotal removed/replaced files: #{log.pop}\n\r"
+  baseDir = log.shift
+  # write logfile head
+  open("#{baseDir}#{log_name}", 'w') {|file| file <<  str_log_header}
+
+  str_log = log.join("\n")
+  open("#{baseDir}#{log_name}", 'a') {|file| file <<  str_log}
+
+  return baseDir.to_s + log_name
+end
+
+arr_log << del_counter
+#puts del_counter
+logDir = mklog(arr_log)
+#puts arr_log.last
+puts "==> #{del_counter} files replaced."
+puts "==> Logfile location: #{logDir}"
+puts "==> cleaning finished"
